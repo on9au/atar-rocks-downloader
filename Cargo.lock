@@ -134,6 +134,7 @@ dependencies = [
  "glob",
  "indicatif",
  "once_cell",
+ "percent-encoding",
  "rand",
  "reqwest",
  "scraper",

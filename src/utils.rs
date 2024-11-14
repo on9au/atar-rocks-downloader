@@ -8,7 +8,10 @@ use reqwest::{
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tracing::{debug, info, warn};
 
-use crate::config::{FilterRule, RuleType};
+use crate::{
+    config::{FilterRule, RuleType},
+    crawl_data::DownloadData,
+};
 
 /// Create Http Client with custom headers
 pub fn create_http_client(user_agent: &str) -> Client {
@@ -43,17 +46,17 @@ pub fn create_http_client(user_agent: &str) -> Client {
 
 /// Displays the files and total size, then prompts the user for confirmation.
 pub async fn display_files_and_prompt(
-    files: &[String],
+    files: &[DownloadData],
     total_size: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Display the files to download
     info!("Files to download:");
     for file in files {
-        info!("{}", file);
+        println!("{}", file);
     }
 
     // Display the total size
-    info!("Total size: {} bytes", total_size);
+    info!("Total size: {} bytes", format_size(total_size));
 
     // Prompt the user for confirmation
     let mut user_input = String::new();

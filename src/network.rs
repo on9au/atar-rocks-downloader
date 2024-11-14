@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use indicatif::{ProgressBar, ProgressStyle};
+use percent_encoding::percent_decode_str;
 use reqwest::{Client, Url};
 use scraper::Selector;
 use tokio::{fs::File, io::AsyncWriteExt, sync::Semaphore};
@@ -8,6 +9,7 @@ use tracing::{debug, info, trace};
 
 use crate::{
     config::FilterRule,
+    crawl_data::DownloadData,
     utils::{format_size, get_file_size, should_filter, should_skip_url},
 };
 
@@ -19,7 +21,8 @@ pub async fn crawl_directory(
     pb: &ProgressBar,
     total_size: &mut u64,
     filters: &[FilterRule],
-) -> Result<(Vec<String>, u64, Vec<String>), Box<dyn std::error::Error>> {
+    root_relative_path: &str,
+) -> Result<(Vec<DownloadData>, u64, Vec<String>), Box<dyn std::error::Error>> {
     // Send a GET request to the URL
     // random_sleep().await; // Sleep for a random duration before sending the request
     let response = client.get(url).send().await?;
@@ -60,6 +63,12 @@ pub async fn crawl_directory(
                 debug!("Found directory: {}", href);
                 let new_output_dir = format!("{}/{}", output_dir, href.trim_end_matches('/'));
 
+                let new_root_relative_path = if root_relative_path.is_empty() {
+                    href
+                } else {
+                    &format!("{}/{}", root_relative_path, href)
+                };
+
                 directories_to_create.push(new_output_dir.clone());
 
                 // Recurse into the directory
@@ -71,6 +80,7 @@ pub async fn crawl_directory(
                         pb,
                         total_size,
                         filters,
+                        new_root_relative_path,
                     ))
                     .await?;
 
@@ -79,7 +89,10 @@ pub async fn crawl_directory(
             } else {
                 // It's a file; add it to the list of files to download
                 debug!("Found file: {}", href);
-                files_to_download.push(full_url.as_str().to_string());
+                files_to_download.push(DownloadData {
+                    url: full_url.to_string(),
+                    output_dir: format!("{}/{}", root_relative_path, href),
+                });
 
                 // Get the file size (using HEAD request to avoid downloading it)
                 if let Ok(size) = get_file_size(client, &full_url).await {
@@ -95,7 +108,7 @@ pub async fn crawl_directory(
 /// Downloads files in parallel using async tasks.
 pub async fn download_files_parallel(
     client: &Client,
-    files: Vec<String>,
+    files: Vec<DownloadData>,
     output_dir: &str,
     concurrent_downloads: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -116,21 +129,24 @@ pub async fn download_files_parallel(
     // We need to Arc the client to share it among tasks
     let client: Arc<Client> = Arc::new(client.clone());
 
-    for file_url in files {
+    for mut file in files {
         let client = client.clone();
         let pb = pb.clone();
         let semaphore = semaphore.clone();
         let output_dir = output_dir.to_string();
 
+        // Rename the file to decode any percent-encoded characters
+        file.output_dir = percent_decode_str(&file.output_dir)
+            .decode_utf8()?
+            .into_owned();
+
         // Spawn a task for each file download
         let task = tokio::spawn(async move {
             let permit = semaphore.acquire().await.unwrap(); // Acquire a permit before starting
-            let file_name = file_url.split('/').last().unwrap();
-            let file_path = format!("{}/{}", output_dir, file_name);
 
             // Download and save the file
-            if let Err(e) = download_file(client, &file_url, &file_path).await {
-                tracing::error!("Failed to download {}: {}", file_url, e);
+            if let Err(e) = download_file(client, &file, &output_dir).await {
+                tracing::error!("Failed to download {}: {}", file, e);
             }
 
             let pb = pb.lock().await;
@@ -151,25 +167,25 @@ pub async fn download_files_parallel(
 /// Downloads a file and saves it to the specified path.
 pub async fn download_file(
     client: Arc<Client>,
-    url: &str,
+    dload_file: &DownloadData,
     output_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Send the GET request to download the file
-    let response = client.clone().get(url).send().await?;
+    let response = client.clone().get(dload_file.url.clone()).send().await?;
 
     // Ensure the response is successful
     if !response.status().is_success() {
-        return Err(format!("Failed to download file: {}", url).into());
+        return Err(format!("Failed to download file: {}", dload_file).into());
     }
 
     // Open the output file
-    let mut file = File::create(output_path).await?;
+    let mut file = File::create(format!("{}/{}", output_path, dload_file.output_dir)).await?;
 
     // Write the content to the file
     let content = response.bytes().await?.to_vec();
     file.write_all(&content).await?;
 
-    info!("Downloaded {}", url);
+    debug!("Downloaded {}", dload_file);
 
     Ok(())
 }

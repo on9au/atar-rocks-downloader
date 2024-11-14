@@ -17,6 +17,7 @@ use config::{Config, DEFAULT_CONFIG_PATH};
 use crawl_data::CrawlData;
 use indicatif::{ProgressBar, ProgressStyle};
 use network::{crawl_directory, download_files_parallel};
+use percent_encoding::percent_decode_str;
 use tokio::task;
 use tracing::{error, info, trace};
 use utils::{create_http_client, display_files_and_prompt};
@@ -131,6 +132,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &pb,
             &mut 0,
             &config.filter,
+            "",
         )
         .await?;
 
@@ -159,6 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let create_dir_tasks = crawl_data.directories_to_create.iter().map(|dir| {
         let dir = dir.clone();
+        let dir = percent_decode_str(&dir).decode_utf8_lossy().to_string();
         task::spawn(async move {
             create_dir_all(dir)?;
             Ok::<_, io::Error>(())
