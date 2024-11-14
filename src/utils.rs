@@ -48,7 +48,7 @@ pub fn create_http_client(user_agent: &str) -> Client {
 pub async fn display_files_and_prompt(
     files: &[DownloadData],
     total_size: u64,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Display the files to download
     info!("Files to download:");
     for file in files {

@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 
 use indicatif::{ProgressBar, ProgressStyle};
 use percent_encoding::percent_decode_str;
@@ -22,7 +25,7 @@ pub async fn crawl_directory(
     total_size: &mut u64,
     filters: &[FilterRule],
     root_relative_path: &str,
-) -> Result<(Vec<DownloadData>, u64, Vec<String>), Box<dyn std::error::Error>> {
+) -> Result<(Vec<DownloadData>, u64, Vec<String>), Box<dyn std::error::Error + Send + Sync>> {
     // Send a GET request to the URL
     // random_sleep().await; // Sleep for a random duration before sending the request
     let response = client.get(url).send().await?;
@@ -30,7 +33,7 @@ pub async fn crawl_directory(
 
     // Parse HTML body to extract links
     let document = scraper::Html::parse_document(&body);
-    let selector = Selector::parse("a")?;
+    let selector = Selector::parse("a").unwrap();
 
     let mut files_to_download = Vec::new();
     let mut directories_to_create = Vec::new();
@@ -48,7 +51,7 @@ pub async fn crawl_directory(
             let relative_path = full_url.path();
 
             // Check if the URL matches any of the filter rules
-            if should_filter(relative_path, filters)? {
+            if should_filter(relative_path, filters).unwrap_or(false) {
                 continue;
             }
 
@@ -111,18 +114,19 @@ pub async fn download_files_parallel(
     files: Vec<DownloadData>,
     output_dir: &str,
     concurrent_downloads: usize,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let pb = Arc::new(tokio::sync::Mutex::new(
         ProgressBar::new(files.len() as u64),
     ));
     pb.lock().await.set_style(
         ProgressStyle::default_bar()
-            .template("{bar:40} {pos}/{len} ({eta})")?
+            .template("{bar:40} {pos}/{len} (ETA: {eta}) {msg}")?
             .progress_chars("█▓▒░"),
     );
 
     // Limit the number of concurrent downloads
     let semaphore = Arc::new(Semaphore::new(concurrent_downloads));
+    let total_size_downloaded = Arc::new(AtomicU64::new(0));
 
     let mut tasks = Vec::new();
 
@@ -134,6 +138,7 @@ pub async fn download_files_parallel(
         let pb = pb.clone();
         let semaphore = semaphore.clone();
         let output_dir = output_dir.to_string();
+        let total_size_downloaded = total_size_downloaded.clone();
 
         // Rename the file to decode any percent-encoded characters
         file.output_dir = percent_decode_str(&file.output_dir)
@@ -145,12 +150,20 @@ pub async fn download_files_parallel(
             let permit = semaphore.acquire().await.unwrap(); // Acquire a permit before starting
 
             // Download and save the file
-            if let Err(e) = download_file(client, &file, &output_dir).await {
-                tracing::error!("Failed to download {}: {}", file, e);
+            match download_file(client, &file, &output_dir).await {
+                Ok(size) => {
+                    total_size_downloaded.fetch_add(size, Ordering::SeqCst);
+                    let downloaded_size = total_size_downloaded.load(Ordering::SeqCst);
+                    let formatted_size = format_size(downloaded_size);
+                    let pb = pb.lock().await;
+                    pb.set_message(format!("Downloading: {} / {}", file.url, formatted_size));
+                    pb.inc(1); // Increment the progress bar
+                }
+                Err(e) => {
+                    tracing::error!("Failed to download {}: {}", file, e);
+                }
             }
 
-            let pb = pb.lock().await;
-            pb.inc(1); // Increment the progress bar
             drop(permit); // Release the permit when done
         });
 
@@ -164,12 +177,12 @@ pub async fn download_files_parallel(
     Ok(())
 }
 
-/// Downloads a file and saves it to the specified path.
+/// Downloads a file and saves it to the specified path, returning the size of the downloaded file.
 pub async fn download_file(
     client: Arc<Client>,
     dload_file: &DownloadData,
     output_path: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
     // Send the GET request to download the file
     let response = client.clone().get(dload_file.url.clone()).send().await?;
 
@@ -183,9 +196,10 @@ pub async fn download_file(
 
     // Write the content to the file
     let content = response.bytes().await?.to_vec();
+    let size = content.len() as u64;
     file.write_all(&content).await?;
 
     debug!("Downloaded {}", dload_file);
 
-    Ok(())
+    Ok(size)
 }
