@@ -2,6 +2,16 @@
 
 A web-crawler/script to download the files from [atar.rocks](https://atar.rocks).
 
+## Features
+
+- Ability to save and load caches, preventing the need to rescan the website.
+- Informative progress bar and logging.
+- Fast and efficient, thanks to the Rust programming language. (my code still sucks though)
+
+## Usage
+
+Please look at the wiki for detailed instructions on how to use the script.
+
 ## I'm a beginner, how can I run this script?
 
 > [!NOTE]
