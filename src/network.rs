@@ -1,6 +1,9 @@
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
+use std::{
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::Duration,
 };
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -157,6 +160,7 @@ pub async fn download_files_parallel(
             "Starting download: {}",
             truncate_string(&file.url, 70)
         ));
+        file_pb.enable_steady_tick(Duration::from_millis(100));
 
         // Spawn a task for each file download
         let task = tokio::spawn(async move {
