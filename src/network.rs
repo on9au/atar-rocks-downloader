@@ -5,7 +5,7 @@ use percent_encoding::percent_decode_str;
 use reqwest::{Client, Url};
 use scraper::Selector;
 use tokio::{fs::File, io::AsyncWriteExt, sync::Semaphore};
-use tracing::{debug, info, trace};
+use tracing::{debug, trace};
 
 use crate::{
     config::FilterRule,
