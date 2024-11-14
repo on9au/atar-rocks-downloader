@@ -59,6 +59,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
+    // Display confirmation of the arguments passed
+    if args.load_from_file {
+        info!("Loading crawl data from file: {}", args.crawl_data_path);
+    } else {
+        info!("Crawling website to generate crawl data...");
+    }
+
+    if args.save_to_file {
+        info!("Saving crawl data to file: {}", args.crawl_data_path);
+    }
+
+    if args.load_from_file && args.save_to_file {
+        error!("Cannot load and save to the same file. Aborting.");
+        process::exit(1);
+    }
+
     // Load the configuration from the config file.
     let config = Config::from_file(DEFAULT_CONFIG_PATH).unwrap_or_else(|e| {
         error!("Failed to load configuration: {}", e);
