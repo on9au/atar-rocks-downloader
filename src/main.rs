@@ -102,7 +102,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an HTTP client with custom headers
     let client = create_http_client(&config.user_agent);
 
-    if args.load_from_file && Path::new(&args.crawl_data_path).exists() {
+    if args.load_from_file {
+        if !Path::new(&args.crawl_data_path).exists() {
+            error!("Crawl data file does not exist: {}", args.crawl_data_path);
+            process::exit(1);
+        }
+
         // Read the crawl data from the file
         let data_str = tokio::fs::read(&args.crawl_data_path).await?;
         crawl_data = bincode::deserialize(&data_str)?;
