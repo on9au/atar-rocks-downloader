@@ -1,4 +1,4 @@
-# atar rocks downloader
+# ATAR.Rocks downloader
 
 A web-crawler/script to download the files from [atar.rocks](https://atar.rocks).
 
