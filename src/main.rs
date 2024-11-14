@@ -30,11 +30,11 @@ struct Args {
     crawl_data_path: String,
 
     /// Load crawl data from file instead of crawling the website
-    #[arg(long)]
+    #[arg(short, long)]
     load_from_file: bool,
 
     /// Save crawl data to file after crawling the website
-    #[arg(long)]
+    #[arg(short, long)]
     save_to_file: bool,
 }
 
