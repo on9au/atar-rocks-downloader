@@ -5,4 +5,4 @@ concurrent_downloads = 10
 
 [[filter]]
 rule_type = "Include"
-pattern = "**/aus/*"
+pattern = "*"
