@@ -14,76 +14,69 @@ use crate::{
 /// Crawls the directory at the given URL and collects files to download.
 pub async fn crawl_directory(
     client: &Client,
-    url: &str,
+    start_url: &str,
     output_dir: &str,
     pb: &ProgressBar,
     total_size: &mut u64,
     filters: &[FilterRule],
 ) -> Result<(Vec<String>, u64, Vec<String>), Box<dyn std::error::Error>> {
-    // Send a GET request to the URL
-    // random_sleep().await; // Sleep for a random duration before sending the request
-    let response = client.get(url).send().await?;
-    let body = response.text().await?;
-
-    // Parse HTML body to extract links
-    let document = scraper::Html::parse_document(&body);
-    let selector = Selector::parse("a")?;
-
     let mut files_to_download = Vec::new();
     let mut directories_to_create = Vec::new();
+    // let mut tasks = Vec::new();
 
-    for element in document.select(&selector) {
-        if let Some(href) = element.value().attr("href") {
-            trace!("Found link with href: {}", href);
+    // Use a stack to manage the directories to crawl
+    let mut stack = vec![(start_url.to_string(), output_dir.to_string())];
 
-            // Skip unwanted URLs based on specific patterns
-            if should_skip_url(href) {
-                continue;
-            }
+    while let Some((url, output_dir)) = stack.pop() {
+        // Send a GET request to the URL
+        let response = client.get(&url).send().await?;
+        let body = response.text().await?;
 
-            let full_url = Url::parse(url)?.join(href)?;
-            let relative_path = full_url.path();
+        // Parse HTML body to extract links
+        let document = scraper::Html::parse_document(&body);
+        let selector = Selector::parse("a")?;
 
-            // Check if the URL matches any of the filter rules
-            if should_filter(relative_path, filters)? {
-                continue;
-            }
+        for element in document.select(&selector) {
+            if let Some(href) = element.value().attr("href") {
+                trace!("Found link with href: {}", href);
 
-            // Format the total size and set the message
-            let formatted_size = format_size(*total_size);
-            pb.set_message(format!("({:6}) Scanning: {}", formatted_size, full_url));
+                // Skip unwanted URLs based on specific patterns
+                if should_skip_url(href) {
+                    continue;
+                }
 
-            pb.inc(1); // Increment the progress bar
+                let full_url = Url::parse(&url)?.join(href)?;
+                let relative_path = full_url.path();
 
-            // Check if it's a directory (simple heuristic: ends with '/')
-            if href.ends_with('/') {
-                debug!("Found directory: {}", href);
-                let new_output_dir = format!("{}/{}", output_dir, href.trim_end_matches('/'));
+                // Check if the URL matches any of the filter rules
+                if should_filter(relative_path, filters)? {
+                    continue;
+                }
 
-                directories_to_create.push(new_output_dir.clone());
+                // Format the total size and set the message
+                let formatted_size = format_size(*total_size);
+                pb.set_message(format!("({:6}) Scanning: {}", formatted_size, full_url));
 
-                // Recurse into the directory
-                let (sub_dir_files, _sub_dir_size, sub_directories_to_create) =
-                    Box::pin(crawl_directory(
-                        client,
-                        full_url.as_str(),
-                        &new_output_dir,
-                        pb,
-                        total_size,
-                        filters,
-                    ))
-                    .await?;
+                pb.inc(1); // Increment the progress bar
 
-                files_to_download.extend(sub_dir_files); // Collect files from subdirectory
-                directories_to_create.extend(sub_directories_to_create); // Collect directories to create
-            } else {
-                // It's a file; add it to the list of files to download
-                debug!("Found file: {}", href);
-                files_to_download.push(full_url.as_str().to_string());
+                // Check if it's a directory (simple heuristic: ends with '/')
+                if href.ends_with('/') {
+                    debug!("Found directory: {}", href);
+                    let new_output_dir = format!("{}/{}", output_dir, href.trim_end_matches('/'));
 
-                // Get the file size (using HEAD request to avoid downloading it)
-                if let Ok(size) = get_file_size(client, &full_url).await {
-                    *total_size += size;
+                    directories_to_create.push(new_output_dir.clone());
+
+                    // Add the directory to the stack to crawl it later
+                    stack.push((full_url.to_string(), new_output_dir));
+                } else {
+                    // It's a file; add it to the list of files to download
+                    debug!("Found file: {}", href);
+                    files_to_download.push(full_url.as_str().to_string());
+
+                    // Get the file size (using HEAD request to avoid downloading it)
+                    if let Ok(size) = get_file_size(client, &full_url).await {
+                        *total_size += size;
+                    }
                 }
             }
         }
