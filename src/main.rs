@@ -195,6 +195,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         crawl_data.download_list,
         &config.output_dir,
         config.concurrent_downloads,
+        crawl_data.total_size,
     )
     .await?;
 

@@ -115,12 +115,13 @@ pub async fn download_files_parallel(
     files: Vec<DownloadData>,
     output_dir: &str,
     concurrent_downloads: usize,
+    total_size: u64,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let multi_pb = Arc::new(MultiProgress::new());
-    let overall_pb = multi_pb.add(ProgressBar::new(files.len() as u64));
+    let overall_pb = multi_pb.add(ProgressBar::new(total_size));
     overall_pb.set_style(
         ProgressStyle::default_bar()
-            .template("Overall Progress [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
+            .template("Overall Progress [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
             .unwrap()
             .progress_chars("█▓▒░"),
     );
@@ -164,10 +165,8 @@ pub async fn download_files_parallel(
             match download_file(client, &file, &output_dir, &file_pb).await {
                 Ok(size) => {
                     total_size_downloaded.fetch_add(size, Ordering::SeqCst);
-                    // let downloaded_size = total_size_downloaded.load(Ordering::SeqCst);
-                    // let formatted_size = format_size(downloaded_size);
+                    overall_pb.set_position(total_size_downloaded.load(Ordering::SeqCst));
                     file_pb.finish_and_clear();
-                    overall_pb.inc(1); // Increment the overall progress bar
                 }
                 Err(e) => {
                     tracing::error!("Failed to download {}: {}", file, e);
@@ -190,6 +189,7 @@ pub async fn download_files_parallel(
 
 /// Downloads a file and saves it to the specified path, returning the size of the downloaded file.
 
+/// Downloads a file and saves it to the specified path, returning the size of the downloaded file.
 pub async fn download_file(
     client: Arc<Client>,
     dload_file: &DownloadData,
