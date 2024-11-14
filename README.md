@@ -4,6 +4,9 @@ A web-crawler/script to download the files from [atar.rocks](https://atar.rocks)
 
 ## I'm a beginner, how can I run this script?
 
+[!NOTE]
+The script is not available for download yet. Please wait for the first release, or build the script yourself.
+
 1. Goto [releases](/releases) and download the latest release.
 2. Scroll down to the assets section and download the file corresponding to your operating system and architecture.
 3. For:
