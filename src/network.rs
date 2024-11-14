@@ -147,18 +147,18 @@ pub async fn download_files_parallel(
             .decode_utf8()?
             .into_owned();
 
-        // Create a progress bar for each file download
-        let file_pb = multi_pb.add(ProgressBar::new_spinner());
-        file_pb.set_style(
-            ProgressStyle::default_bar()
-                .template("{msg} [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-                .unwrap(),
-        );
-        file_pb.set_message(truncate_string(&file.url, 70).to_string());
-
         // Spawn a task for each file download
         let task = tokio::spawn(async move {
             let permit = semaphore.acquire().await.unwrap(); // Acquire a permit before starting
+
+            // Create a progress bar for each file download
+            let file_pb = multi_pb.add(ProgressBar::new_spinner());
+            file_pb.set_style(
+                ProgressStyle::default_bar()
+                    .template("{msg} [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                    .unwrap(),
+            );
+            file_pb.set_message(truncate_string(&file.url, 70).to_string());
 
             // Download and save the file
             match download_file(client, &file, &output_dir, &file_pb).await {
