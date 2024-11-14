@@ -1,23 +1,48 @@
 mod config;
+mod crawl_data;
 mod network;
 mod utils;
 
 use std::{
     fs::create_dir_all,
     io::{self},
+    path::Path,
     process,
     time::Duration,
 };
 
+use chrono::Utc;
+use clap::Parser;
 use config::{Config, DEFAULT_CONFIG_PATH};
+use crawl_data::CrawlData;
 use indicatif::{ProgressBar, ProgressStyle};
 use network::{crawl_directory, download_files_parallel};
 use tokio::task;
 use tracing::{error, info, trace};
 use utils::{create_http_client, display_files_and_prompt};
 
+/// Command-line arguments
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Path to the saved crawl data file
+    #[arg(short, long, default_value = "crawl_data.json")]
+    crawl_data_path: String,
+
+    /// Load crawl data from file instead of crawling the website
+    #[arg(long)]
+    load_from_file: bool,
+
+    /// Save crawl data to file after crawling the website
+    #[arg(long)]
+    save_to_file: bool,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Parse the command-line arguments
+    let args = Args::parse();
+
     // Initialize the logger.
 
     // In debug mode, log everything.
@@ -56,51 +81,62 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     trace!("Configuration loaded: {:#?}", config);
 
+    let crawl_data: CrawlData;
+
     // Create an HTTP client with custom headers
     let client = create_http_client(&config.user_agent);
 
-    info!("Scanning website for files to download. This may take a very long time...");
+    if args.load_from_file && Path::new(&args.crawl_data_path).exists() {
+        // Read the crawl data from the file
+        let data_str = tokio::fs::read_to_string(&args.crawl_data_path).await?;
+        crawl_data = serde_json::from_str(&data_str)?;
+        info!("Loaded crawl data from {}", args.crawl_data_path);
+    } else {
+        // Crawl the website and save the data if requested
+        info!("Scanning website for files to download. This may take a very long time...");
 
-    // Craw the website and collect files to download
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::with_template("{spinner:.green} ({elapsed}) Hits: {pos:3} | {msg}")?
+                .progress_chars("─┼━"),
+        );
+        pb.set_message("Scanning...");
+        pb.enable_steady_tick(Duration::from_millis(150));
 
-    // Create a progress bar to display scanning status live
-    let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::with_template("{spinner:.green} ({elapsed}) Hits: {pos:3} | {msg}")?
-            .progress_chars("─┼━"),
-    );
-    pb.set_message("Scanning...");
-    pb.enable_steady_tick(Duration::from_millis(150)); // Enable a steady tick every 150ms
+        let (download_list, total_size, directories_to_create) = crawl_directory(
+            &client,
+            &config.url,
+            &config.output_dir,
+            &pb,
+            &mut 0,
+            &config.filter,
+        )
+        .await?;
 
-    // Begin crawling the website.
-    let (download_list, total_size, directories_to_create) = crawl_directory(
-        &client,
-        &config.url,
-        &config.output_dir,
-        &pb,
-        &mut 0,
-        &config.filter,
-    )
-    .await?;
+        pb.finish_with_message("Scan complete.");
 
-    // Complete the progress bar when finished
-    pb.finish_with_message("Scan complete.");
+        crawl_data = CrawlData {
+            download_list,
+            total_size,
+            directories_to_create,
+            saved_at: Utc::now(),
+        };
 
-    // Present the list of files to download and total size
-    info!(
-        "Found {} files to download, estimated total size: {} bytes",
-        download_list.len(),
-        total_size
-    );
+        if args.save_to_file {
+            let data_str = serde_json::to_string_pretty(&crawl_data)?;
+            tokio::fs::write(&args.crawl_data_path, data_str).await?;
+            info!("Saved crawl data to {}", args.crawl_data_path);
+        }
+    }
 
     // Display file names and prompt the user for confirmation
-    display_files_and_prompt(&download_list, total_size).await?;
+    display_files_and_prompt(&crawl_data.download_list, crawl_data.total_size).await?;
 
     // Create directories for the files to download
     // Since we expect a large number of directories, we create them in parallel
     info!("Creating directories for the files...");
 
-    let create_dir_tasks = directories_to_create.iter().map(|dir| {
+    let create_dir_tasks = crawl_data.directories_to_create.iter().map(|dir| {
         let dir = dir.clone();
         task::spawn(async move {
             create_dir_all(dir)?;
@@ -132,7 +168,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     download_files_parallel(
         &client,
-        download_list,
+        crawl_data.download_list,
         &config.output_dir,
         config.concurrent_downloads,
     )
