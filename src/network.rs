@@ -3,7 +3,7 @@ use std::sync::{
     Arc,
 };
 
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use percent_encoding::percent_decode_str;
 use reqwest::{Client, Url};
 use scraper::Selector;
@@ -115,12 +115,12 @@ pub async fn download_files_parallel(
     output_dir: &str,
     concurrent_downloads: usize,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let pb = Arc::new(tokio::sync::Mutex::new(
-        ProgressBar::new(files.len() as u64),
-    ));
-    pb.lock().await.set_style(
+    let multi_pb = Arc::new(MultiProgress::new());
+    let overall_pb = multi_pb.add(ProgressBar::new(files.len() as u64));
+    overall_pb.set_style(
         ProgressStyle::default_bar()
-            .template("{bar:40} {pos}/{len} (ETA: {eta}) {msg}")?
+            .template("{bar:40} {pos}/{len} ({eta}) Overall Progress")
+            .unwrap()
             .progress_chars("█▓▒░"),
     );
 
@@ -135,15 +135,28 @@ pub async fn download_files_parallel(
 
     for mut file in files {
         let client = client.clone();
-        let pb = pb.clone();
+        let multi_pb = multi_pb.clone();
         let semaphore = semaphore.clone();
         let output_dir = output_dir.to_string();
         let total_size_downloaded = total_size_downloaded.clone();
+        let overall_pb = overall_pb.clone();
 
         // Rename the file to decode any percent-encoded characters
         file.output_dir = percent_decode_str(&file.output_dir)
             .decode_utf8()?
             .into_owned();
+
+        // Create a progress bar for each file download
+        let file_pb = multi_pb.add(ProgressBar::new_spinner());
+        file_pb.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.green} {msg}")
+                .unwrap(),
+        );
+        file_pb.set_message(format!(
+            "Starting download: {}",
+            truncate_string(&file.url, 70)
+        ));
 
         // Spawn a task for each file download
         let task = tokio::spawn(async move {
@@ -155,16 +168,17 @@ pub async fn download_files_parallel(
                     total_size_downloaded.fetch_add(size, Ordering::SeqCst);
                     let downloaded_size = total_size_downloaded.load(Ordering::SeqCst);
                     let formatted_size = format_size(downloaded_size);
-                    let pb = pb.lock().await;
-                    pb.set_message(format!(
-                        "Downloading: {} (Total: {})",
-                        truncate_string(&file.output_dir, 30),
+                    file_pb.finish_with_message(format!(
+                        "Downloaded: {} (Total: {})",
+                        truncate_string(&file.url, 50),
                         formatted_size
                     ));
-                    pb.inc(1); // Increment the progress bar
+                    overall_pb.inc(1); // Increment the overall progress bar
                 }
                 Err(e) => {
                     tracing::error!("Failed to download {}: {}", file, e);
+                    file_pb
+                        .finish_with_message(format!("Failed: {}", truncate_string(&file.url, 50)));
                 }
             }
 
@@ -177,7 +191,7 @@ pub async fn download_files_parallel(
     // Wait for all tasks to complete
     futures::future::join_all(tasks).await;
 
-    pb.lock().await.finish_with_message("Download complete!");
+    overall_pb.finish_with_message("Download complete!");
     Ok(())
 }
 
