@@ -6,7 +6,10 @@ use scraper::Selector;
 use tokio::{fs::File, io::AsyncWriteExt, sync::Semaphore};
 use tracing::{debug, info, trace};
 
-use crate::utils::{format_size, get_file_size, should_skip_url};
+use crate::{
+    config::FilterRule,
+    utils::{format_size, get_file_size, should_filter, should_skip_url},
+};
 
 /// Crawls the directory at the given URL and collects files to download.
 pub async fn crawl_directory(
@@ -15,6 +18,7 @@ pub async fn crawl_directory(
     output_dir: &str,
     pb: &ProgressBar,
     total_size: &mut u64,
+    filters: &[FilterRule],
 ) -> Result<(Vec<String>, u64, Vec<String>), Box<dyn std::error::Error>> {
     // Send a GET request to the URL
     // random_sleep().await; // Sleep for a random duration before sending the request
@@ -38,6 +42,12 @@ pub async fn crawl_directory(
             }
 
             let full_url = Url::parse(url)?.join(href)?;
+            let relative_path = full_url.path();
+
+            // Check if the URL matches any of the filter rules
+            if should_filter(relative_path, filters)? {
+                continue;
+            }
 
             // Format the total size and set the message
             let formatted_size = format_size(*total_size);
@@ -53,10 +63,16 @@ pub async fn crawl_directory(
                 directories_to_create.push(new_output_dir.clone());
 
                 // Recurse into the directory
-                let (sub_dir_files, _sub_dir_size, sub_directories_to_create) = Box::pin(
-                    crawl_directory(client, full_url.as_str(), &new_output_dir, pb, total_size),
-                )
-                .await?;
+                let (sub_dir_files, _sub_dir_size, sub_directories_to_create) =
+                    Box::pin(crawl_directory(
+                        client,
+                        full_url.as_str(),
+                        &new_output_dir,
+                        pb,
+                        total_size,
+                        filters,
+                    ))
+                    .await?;
 
                 files_to_download.extend(sub_dir_files); // Collect files from subdirectory
                 directories_to_create.extend(sub_directories_to_create); // Collect directories to create

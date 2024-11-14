@@ -1,11 +1,14 @@
 use std::{io::Write, process};
 
+use glob::Pattern;
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, REFERER},
     Client, Url,
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tracing::{info, warn};
+
+use crate::config::{FilterRule, RuleType};
 
 /// Create Http Client with custom headers
 pub fn create_http_client(user_agent: &str) -> Client {
@@ -124,4 +127,24 @@ pub fn format_size(size: u64) -> String {
     };
 
     format!("{:.2} {}", value, unit)
+}
+
+// Function to determine if a path should be filtered
+pub fn should_filter(
+    path: &str,
+    filters: &[FilterRule],
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let mut is_included = false;
+
+    for rule in filters {
+        let pattern = Pattern::new(&rule.pattern)?;
+        if pattern.matches(path) {
+            match rule.rule_type {
+                RuleType::Include => is_included = true,
+                RuleType::Exclude => return Ok(true),
+            }
+        }
+    }
+
+    Ok(!is_included)
 }
