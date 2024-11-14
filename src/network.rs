@@ -120,7 +120,7 @@ pub async fn download_files_parallel(
     let overall_pb = multi_pb.add(ProgressBar::new(files.len() as u64));
     overall_pb.set_style(
         ProgressStyle::default_bar()
-            .template("{bar:40} {pos}/{len} ({eta}) Overall Progress")
+            .template("Overall Progress [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
             .unwrap()
             .progress_chars("█▓▒░"),
     );
@@ -150,14 +150,11 @@ pub async fn download_files_parallel(
         // Create a progress bar for each file download
         let file_pb = multi_pb.add(ProgressBar::new_spinner());
         file_pb.set_style(
-            ProgressStyle::default_spinner()
-                .template("{spinner:.green} {msg}")
+            ProgressStyle::default_bar()
+                .template("{msg} [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
                 .unwrap(),
         );
-        file_pb.set_message(format!(
-            "Starting download: {}",
-            truncate_string(&file.url, 50)
-        ));
+        file_pb.set_message(truncate_string(&file.url, 70).to_string());
 
         // Spawn a task for each file download
         let task = tokio::spawn(async move {
@@ -167,19 +164,14 @@ pub async fn download_files_parallel(
             match download_file(client, &file, &output_dir, &file_pb).await {
                 Ok(size) => {
                     total_size_downloaded.fetch_add(size, Ordering::SeqCst);
-                    let downloaded_size = total_size_downloaded.load(Ordering::SeqCst);
-                    let formatted_size = format_size(downloaded_size);
-                    file_pb.finish_with_message(format!(
-                        "Downloaded: {} (Total: {})",
-                        truncate_string(&file.url, 50),
-                        formatted_size
-                    ));
+                    // let downloaded_size = total_size_downloaded.load(Ordering::SeqCst);
+                    // let formatted_size = format_size(downloaded_size);
+                    file_pb.finish_and_clear();
                     overall_pb.inc(1); // Increment the overall progress bar
                 }
                 Err(e) => {
                     tracing::error!("Failed to download {}: {}", file, e);
-                    file_pb
-                        .finish_with_message(format!("Failed: {}", truncate_string(&file.url, 50)));
+                    file_pb.finish_and_clear();
                 }
             }
 
