@@ -1,0 +1,59 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-gnu, x86_64-pc-windows-gnu, x86_64-apple-darwin]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: ${{ matrix.target }}
+        override: true
+
+    - name: Install dependencies
+      run: sudo apt-get install -y gcc-multilib
+
+    - name: Build
+      run: cargo build --release --target ${{ matrix.target }}
+
+    - name: Run tests
+      run: cargo test --verbose --target ${{ matrix.target }}
+
+    - name: Upload Linux Executable
+      if: matrix.target == 'x86_64-unknown-linux-gnu'
+      uses: actions/upload-artifact@v3
+      with:
+        name: linux-executable
+        path: target/x86_64-unknown-linux-gnu/release/atar-rocks-downloader
+
+    - name: Upload Windows Executable
+      if: matrix.target == 'x86_64-pc-windows-gnu'
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-executable
+        path: target/x86_64-pc-windows-gnu/release/atar-rocks-downloader.exe
+
+    - name: Upload macOS Executable
+      if: matrix.target == 'x86_64-apple-darwin'
+      uses: actions/upload-artifact@v3
+      with:
+        name: macos-executable
+        path: target/x86_64-apple-darwin/release/atar-rocks-downloader
