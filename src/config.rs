@@ -24,13 +24,13 @@ pub struct Config {
     pub filter: Vec<FilterRule>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilterRule {
     pub rule_type: RuleType,
     pub pattern: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RuleType {
     Include,
     Exclude,
