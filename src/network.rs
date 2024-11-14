@@ -1,11 +1,9 @@
-use std::{
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
-    time::Duration,
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
 };
 
+use futures::StreamExt;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use percent_encoding::percent_decode_str;
 use reqwest::{Client, Url};
@@ -138,10 +136,10 @@ pub async fn download_files_parallel(
 
     for mut file in files {
         let client = client.clone();
-        let multi_pb = multi_pb.clone();
         let semaphore = semaphore.clone();
         let output_dir = output_dir.to_string();
         let total_size_downloaded = total_size_downloaded.clone();
+        let multi_pb = multi_pb.clone();
         let overall_pb = overall_pb.clone();
 
         // Rename the file to decode any percent-encoded characters
@@ -158,16 +156,15 @@ pub async fn download_files_parallel(
         );
         file_pb.set_message(format!(
             "Starting download: {}",
-            truncate_string(&file.url, 70)
+            truncate_string(&file.url, 50)
         ));
-        file_pb.enable_steady_tick(Duration::from_millis(100));
 
         // Spawn a task for each file download
         let task = tokio::spawn(async move {
             let permit = semaphore.acquire().await.unwrap(); // Acquire a permit before starting
 
             // Download and save the file
-            match download_file(client, &file, &output_dir).await {
+            match download_file(client, &file, &output_dir, &file_pb).await {
                 Ok(size) => {
                     total_size_downloaded.fetch_add(size, Ordering::SeqCst);
                     let downloaded_size = total_size_downloaded.load(Ordering::SeqCst);
@@ -195,16 +192,18 @@ pub async fn download_files_parallel(
     // Wait for all tasks to complete
     futures::future::join_all(tasks).await;
 
-    overall_pb.finish_with_message("Download complete!");
+    overall_pb.finish_with_message("All downloads complete!");
     Ok(())
 }
 
 /// Downloads a file and saves it to the specified path, returning the size of the downloaded file.
+
 pub async fn download_file(
     client: Arc<Client>,
     dload_file: &DownloadData,
     output_path: &str,
-) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+    pb: &ProgressBar,
+) -> Result<u64, Box<dyn std::error::Error>> {
     // Send the GET request to download the file
     let response = client.clone().get(dload_file.url.clone()).send().await?;
 
@@ -213,15 +212,24 @@ pub async fn download_file(
         return Err(format!("Failed to download file: {}", dload_file).into());
     }
 
+    // Get the total size of the file
+    let total_size = response.content_length().unwrap_or(0);
+    pb.set_length(total_size);
+
     // Open the output file
     let mut file = File::create(format!("{}/{}", output_path, dload_file.output_dir)).await?;
 
-    // Write the content to the file
-    let content = response.bytes().await?.to_vec();
-    let size = content.len() as u64;
-    file.write_all(&content).await?;
+    // Write the content to the file in chunks
+    let mut downloaded_size = 0;
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        file.write_all(&chunk).await?;
+        downloaded_size += chunk.len() as u64;
+        pb.set_position(downloaded_size);
+    }
 
     debug!("Downloaded {}", dload_file);
 
-    Ok(size)
+    Ok(downloaded_size)
 }
