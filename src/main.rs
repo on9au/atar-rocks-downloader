@@ -26,7 +26,7 @@ use utils::{create_http_client, display_files_and_prompt};
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Path to the saved crawl data file
-    #[arg(short, long, default_value = "crawl_data.json")]
+    #[arg(short, long, default_value = "crawl_data.bin")]
     crawl_data_path: String,
 
     /// Load crawl data from file instead of crawling the website
