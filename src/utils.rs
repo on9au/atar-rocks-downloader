@@ -6,7 +6,7 @@ use reqwest::{
     Client, Url,
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::config::{FilterRule, RuleType};
 
@@ -136,14 +136,28 @@ pub fn should_filter(
 ) -> Result<bool, Box<dyn std::error::Error>> {
     let mut is_included = false;
 
+    if filters.is_empty() {
+        return Ok(false);
+    }
+
     for rule in filters {
         let pattern = Pattern::new(&rule.pattern)?;
         if pattern.matches(path) {
             match rule.rule_type {
-                RuleType::Include => is_included = true,
-                RuleType::Exclude => return Ok(true),
+                RuleType::Include => {
+                    debug!("Including path: {}", path);
+                    is_included = true;
+                }
+                RuleType::Exclude => {
+                    debug!("Excluding path: {}", path);
+                    return Ok(true);
+                }
             }
         }
+    }
+
+    if !is_included {
+        debug!("Excluding path by default: {}", path);
     }
 
     Ok(!is_included)

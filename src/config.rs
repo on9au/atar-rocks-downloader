@@ -43,10 +43,16 @@ impl Default for Config {
             user_agent: DEFAULT_USER_AGENT.to_string(),
             output_dir: DEFAULT_OUTPUT_DIR.to_string(),
             concurrent_downloads: DEFAULT_CONCURRENT_DOWNLOADS,
-            filter: vec![FilterRule {
-                rule_type: RuleType::Exclude,
-                pattern: "**/vcaa/**".to_string(), // Exclude VCAA files by default
-            }],
+            filter: vec![
+                FilterRule {
+                    rule_type: RuleType::Include,
+                    pattern: "*".to_string(), // Include all files by default
+                },
+                FilterRule {
+                    rule_type: RuleType::Exclude,
+                    pattern: "**/vcaa/**".to_string(), // Exclude VCAA files by default
+                },
+            ],
         }
     }
 }

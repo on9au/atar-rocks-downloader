@@ -13,7 +13,7 @@ use config::{Config, DEFAULT_CONFIG_PATH};
 use indicatif::{ProgressBar, ProgressStyle};
 use network::{crawl_directory, download_files_parallel};
 use tokio::task;
-use tracing::{error, info};
+use tracing::{error, info, trace};
 use utils::{create_http_client, display_files_and_prompt};
 
 #[tokio::main]
@@ -53,6 +53,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Return the default configuration
         Config::default()
     });
+
+    trace!("Configuration loaded: {:#?}", config);
 
     // Create an HTTP client with custom headers
     let client = create_http_client(&config.user_agent);
