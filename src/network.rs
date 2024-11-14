@@ -13,7 +13,7 @@ use tracing::{debug, trace};
 use crate::{
     config::FilterRule,
     crawl_data::DownloadData,
-    utils::{format_size, get_file_size, should_filter, should_skip_url},
+    utils::{format_size, get_file_size, should_filter, should_skip_url, truncate_string},
 };
 
 /// Crawls the directory at the given URL and collects files to download.
@@ -156,7 +156,11 @@ pub async fn download_files_parallel(
                     let downloaded_size = total_size_downloaded.load(Ordering::SeqCst);
                     let formatted_size = format_size(downloaded_size);
                     let pb = pb.lock().await;
-                    pb.set_message(format!("Downloading: {} / {}", file.url, formatted_size));
+                    pb.set_message(format!(
+                        "Downloading: {} (Total: {})",
+                        truncate_string(&file.output_dir, 30),
+                        formatted_size
+                    ));
                     pb.inc(1); // Increment the progress bar
                 }
                 Err(e) => {

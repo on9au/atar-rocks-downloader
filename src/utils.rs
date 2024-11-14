@@ -165,3 +165,12 @@ pub fn should_filter(
 
     Ok(!is_included)
 }
+
+/// Truncates a string to the specified length, adding "..." if truncated.
+pub fn truncate_string(s: &str, max_length: usize) -> String {
+    if s.len() > max_length {
+        format!("{}...", &s[..max_length - 3])
+    } else {
+        s.to_string()
+    }
+}
