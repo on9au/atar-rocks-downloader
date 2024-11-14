@@ -88,8 +88,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if args.load_from_file && Path::new(&args.crawl_data_path).exists() {
         // Read the crawl data from the file
-        let data_str = tokio::fs::read_to_string(&args.crawl_data_path).await?;
-        crawl_data = serde_json::from_str(&data_str)?;
+        let data_str = tokio::fs::read(&args.crawl_data_path).await?;
+        crawl_data = bincode::deserialize(&data_str)?;
         info!("Loaded crawl data from {}", args.crawl_data_path);
     } else {
         // Crawl the website and save the data if requested
@@ -123,7 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         if args.save_to_file {
-            let data_str = serde_json::to_string_pretty(&crawl_data)?;
+            let data_str = bincode::serialize(&crawl_data)?;
             tokio::fs::write(&args.crawl_data_path, data_str).await?;
             info!("Saved crawl data to {}", args.crawl_data_path);
         }
