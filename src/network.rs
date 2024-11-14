@@ -196,6 +196,16 @@ pub async fn download_file(
     output_path: &str,
     pb: &ProgressBar,
 ) -> Result<u64, Box<dyn std::error::Error>> {
+    // Check if the file already exists
+    if let Ok(metadata) =
+        tokio::fs::metadata(format!("{}/{}", output_path, dload_file.output_dir)).await
+    {
+        if metadata.is_file() {
+            debug!("Skipping existing file: {}", dload_file);
+            return Ok(metadata.len());
+        }
+    }
+
     // Send the GET request to download the file
     let response = client.clone().get(dload_file.url.clone()).send().await?;
 
