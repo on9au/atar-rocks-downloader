@@ -8,7 +8,7 @@ A web-crawler/script to download the files from [atar.rocks](https://atar.rocks)
 
 - Ability to save and load caches, preventing the need to rescan the website.
 - Informative progress bar and logging.
-- Fast and efficient, thanks to the Rust programming language. (my code still sucks though)
+- Fast and efficient, thanks to the Rust programming language.
 
 ## Usage
 
