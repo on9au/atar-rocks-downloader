@@ -52,7 +52,7 @@ pub async fn display_files_and_prompt(
     // Display the files to download
     info!("Files to download:");
     for file in files {
-        println!("{}", file);
+        println!("{}", file.url);
     }
 
     // Display the total size
