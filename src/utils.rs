@@ -48,6 +48,7 @@ pub fn create_http_client(user_agent: &str) -> Client {
 pub async fn display_files_and_prompt(
     files: &[DownloadData],
     total_size: u64,
+    skip_prompt: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Display the files to download
     info!("Files to download:");
@@ -64,6 +65,12 @@ pub async fn display_files_and_prompt(
     let mut reader = BufReader::new(stdin);
 
     // info!("Do you want to proceed with downloading the files? (Y/n)");
+
+    // If the skip_prompt flag is set, skip the prompt
+    if skip_prompt {
+        info!("Skipping prompt due to --yes flag.");
+        return Ok(());
+    }
 
     // print and flush the message
     print!("\nDo you want to proceed with downloading the files? (Y/n): ");

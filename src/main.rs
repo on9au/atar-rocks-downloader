@@ -38,6 +38,14 @@ struct Args {
     /// Save crawl data to file after crawling the website
     #[arg(short, long)]
     save_to_file: bool,
+
+    /// Always yes to all prompts
+    #[arg(short)]
+    yes: bool,
+
+    /// Only scan the files and then exit
+    #[arg(short, long)]
+    scan_only: bool,
 }
 
 #[tokio::main]
@@ -146,6 +154,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Loaded crawl data from {}", args.crawl_data_path);
     } else {
         // Crawl the website and save the data if requested
+        info!("Crawling website: {}", config.url);
         info!("Scanning website for files to download. This may take a very long time...");
 
         let pb = ProgressBar::new_spinner();
@@ -183,8 +192,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
     }
 
+    if args.scan_only {
+        info!("Scan complete. Exiting without downloading any files.");
+        // On Windows, the console window closes immediately after the program exits.
+        // To prevent this, we wait for user input before exiting.
+        #[cfg(windows)]
+        {
+            use std::io::prelude::*;
+            info!("Press Enter to exit...");
+            let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+        }
+        process::exit(0);
+    }
+
     // Display file names and prompt the user for confirmation
-    display_files_and_prompt(&crawl_data.download_list, crawl_data.total_size).await?;
+    display_files_and_prompt(&crawl_data.download_list, crawl_data.total_size, args.yes).await?;
 
     // Create directories for the files to download
     // Since we expect a large number of directories, we create them in parallel
