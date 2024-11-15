@@ -17,7 +17,7 @@ Please look at the wiki for detailed instructions on how to use the script.
 ## I'm a beginner, how can I run this script?
 
 1. Go to the **[Actions](https://github.com/nulluser0/atar-rocks-downloader/actions)** tab of this repository.
-2. Click on the workflow run that you are interested in.
+2. Click on the workflow run that is at the top and has a green tick (if there are none, wait until they have completed)
 3. Scroll down to the **Artifacts** section at the bottom of the workflow summary.
 4. Click on the artifact you want to download.
 5. For:
