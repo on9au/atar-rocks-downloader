@@ -1,5 +1,3 @@
-[![Rust](https://github.com/nulluser0/atar-rocks-downloader/actions/workflows/rust.yml/badge.svg?branch=master)](https://github.com/nulluser0/atar-rocks-downloader/actions/workflows/rust.yml)
-
 # ATAR.Rocks downloader
 
 A web-crawler/script to download the files from [atar.rocks](https://atar.rocks).
@@ -16,12 +14,25 @@ Please look at the wiki for detailed instructions on how to use the script.
 
 ## I'm a beginner, how can I run this script?
 
+**Latest Stable Version via Releases:**
+
+1. Go to the **[Releases](https://github.com/nulluser0/atar-rocks-downloader/releases/latest)** tab of this repository.
+2. Match your OS and device with the files in the asset.
+3. Download the file by clicking on the files.
+4. For:
+   - `Windows`: Just run the file (or open your terminal, navigate to the directory of the file, and run the file using `.\<filename>`).
+   - `Linux`: Run the file using `./<filename>`.
+   - `MacOS`: Open the Terminal app, navigate to where you installed the program, and run the file using `./<filename>`.
+5. Follow the instructions on the screen.
+
+**Latest Dev Version via Actions:**
+
 1. Go to the **[Actions](https://github.com/nulluser0/atar-rocks-downloader/actions)** tab of this repository.
 2. Click on the workflow run that is at the top and has a green tick (if there are none, wait until they have completed)
 3. Scroll down to the **Artifacts** section at the bottom of the workflow summary.
 4. Click on the artifact you want to download.
 5. For:
-   - `Windows`: Just run the file.
+   - `Windows`: Just run the file (or open your terminal, navigate to the directory of the file, and run the file using `.\<filename>`).
    - `Linux`: Run the file using `./<filename>`.
    - `MacOS`: Open the Terminal app, navigate to where you installed the program, and run the file using `./<filename>`.
 6. Follow the instructions on the screen.
@@ -35,7 +46,7 @@ Prerequisites:
 
 1. Clone the repository using `git clone`.
 2. Navigate to the cloned repository using `cd atar-rocks-downloader`.
-3. Run the script using `cargo run --release`.
+3. Build the script using `cargo build --release`. (You can also directly run with `cargo run --release`)
 4. The binary will be available in the `target/release` directory.
 
 ## License
