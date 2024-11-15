@@ -1,95 +1,66 @@
 name: Rust
 
 on:
-  push:
-    tags:
-      - 'v*'
   pull_request:
-    branches:
-      - main
+    branches: ["main"]
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  release:
-    name: Release - ${{ matrix.platform.os_name }}
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/tags/test-release'
+  build:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        platform:
-          - os_name: Linux-x86_64
-            os: ubuntu-20.04
-            target: x86_64-unknown-linux-gnu
-            bin: atar-rocks-downloader
-            name: atar-rocks-downloader-Linux-x86_64.tar.gz
-            cross: false
-            cargo_command: cargo
-
-          - os_name: Windows-x86_64
-            os: windows-latest
-            target: x86_64-pc-windows-gnu
-            bin: atar-rocks-downloader.exe
-            name: atar-rocks-downloader-Windows-x86_64.zip
-            cross: false
-            cargo_command: cargo
-
-          - os_name: macOS-x86_64
-            os: macOS-latest
-            target: x86_64-apple-darwin
-            bin: atar-rocks-downloader
-            name: atar-rocks-downloader-Darwin-x86_64.tar.gz
-            cross: false
-            cargo_command: cargo
-
-          - os_name: macOS-aarch64
-            os: macOS-latest
+        include:
+          - os: macos-14
             target: aarch64-apple-darwin
-            bin: atar-rocks-downloader
-            name: atar-rocks-downloader-Darwin-aarch64.tar.gz
-            cross: false
-            cargo_command: cargo
+          - os: macos-14
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
 
-    runs-on: ${{ matrix.platform.os }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+      - name: Cache dependencies
+        uses: swatinem/rust-cache@v2
+
+      - name: Install Rust Stable
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ matrix.platform.target }}
-          override: true
+          targets: ${{ matrix.target }}
 
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y gcc-multilib
-        if: matrix.platform.os == 'ubuntu-20.04'
-
-      - name: Build binary
-        run: ${{ matrix.platform.cargo_command }} build --release --target ${{ matrix.platform.target }}
-
-      - name: Strip binary
-        run: strip target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
-        if: matrix.platform.os != 'windows-latest'
-
-      - name: Package as archive
-        run: |
-          cd target/${{ matrix.platform.target }}/release
-          if [[ "${{ matrix.platform.os }}" == "windows-latest" ]]; then
-            7z a ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
-          else
-            tar czvf ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
-          fi
-          cd -
-
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v3
+      - name: Build
+        uses: ClementTsang/cargo-action@v0.0.6
         with:
-          name: ${{ matrix.platform.name }}
-          path: target/${{ matrix.platform.name }}
+          args: --release --target ${{ matrix.target }} --verbose
+          command: build
 
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v1
+      - name: Run tests
+        uses: ClementTsang/cargo-action@v0.0.6
         with:
-          draft: true
-          files: target/${{ matrix.platform.name }}
-          body_path: Changes.md
-        if: startsWith(github.ref, 'refs/tags/v')
+          args: --target ${{ matrix.target }} --verbose
+          command: test
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ferrumc-${{ matrix.os }}
+          path: target/${{ matrix.target }}/release/ferrumc*
+
+      # Uncomment the following block if you want to send a message to Discord:
+      # - name: Send message to Discord
+      #   env:
+      #     DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      #   uses: Ilshidur/action-discord@master
+      #   with:
+      #     args: 'A new commit has been pushed!
+      #
+      #     {{ EVENT_PAYLOAD.head_commit.url }}'
