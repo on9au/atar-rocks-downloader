@@ -209,10 +209,12 @@ pub async fn download_files_parallel(
     let overall_pb = multi_pb.add(ProgressBar::new(total_size));
     overall_pb.set_style(
         ProgressStyle::default_bar()
-            .template("Overall Progress [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+            .template("{msg:70} [{wide_bar:.cyan/blue}] {bytes:12}/{total_bytes:12} ({eta:4})")
             .unwrap()
             .progress_chars("█▓▒░"),
     );
+
+    overall_pb.set_message("Overall Progress");
 
     // Limit the number of concurrent downloads
     let semaphore = Arc::new(Semaphore::new(concurrent_downloads));
@@ -244,10 +246,12 @@ pub async fn download_files_parallel(
             let file_pb = multi_pb.add(ProgressBar::new_spinner());
             file_pb.set_style(
                 ProgressStyle::default_bar()
-                    .template("{msg} [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                    .template(
+                        "{msg:70} [{wide_bar:.cyan/blue}] {bytes:12}/{total_bytes:12} ({eta:4})",
+                    )
                     .unwrap(),
             );
-            file_pb.set_message(truncate_string(&file.url, 70).to_string());
+            file_pb.set_message(truncate_string(&file.output_dir, 70).to_string());
 
             // Download and save the file
             match download_file(client, &file, &output_dir, &file_pb).await {
