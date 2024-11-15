@@ -8,7 +8,6 @@ use std::{
     io::{self},
     path::Path,
     process,
-    sync::Arc,
     time::Duration,
 };
 
@@ -127,11 +126,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         pb.enable_steady_tick(Duration::from_millis(150));
 
         let (download_list, total_size, directories_to_create) = crawl_directory(
-            Arc::new(client.clone()),
+            &client,
             &config.url,
             &config.output_dir,
-            Arc::new(pb.clone()),
-            Arc::from(config.filter.as_slice()),
+            &pb,
+            &mut 0,
+            &config.filter,
+            "",
         )
         .await?;
 
