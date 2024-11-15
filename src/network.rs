@@ -1,6 +1,9 @@
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
+use std::{
+    collections::VecDeque,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
 };
 
 use futures::StreamExt;
@@ -19,94 +22,138 @@ use crate::{
 
 /// Crawls the directory at the given URL and collects files to download.
 pub async fn crawl_directory(
-    client: &Client,
-    url: &str,
+    client: Arc<Client>,
+    start_url: &str,
     output_dir: &str,
-    pb: &ProgressBar,
-    total_size: &mut u64,
-    filters: &[FilterRule],
-    root_relative_path: &str,
+    pb: Arc<ProgressBar>,
+    filters: Arc<[FilterRule]>,
 ) -> Result<(Vec<DownloadData>, u64, Vec<String>), Box<dyn std::error::Error + Send + Sync>> {
-    // Send a GET request to the URL
-    // random_sleep().await; // Sleep for a random duration before sending the request
-    let response = client.get(url).send().await?;
-    let body = response.text().await?;
-
-    // Parse HTML body to extract links
-    let document = scraper::Html::parse_document(&body);
-    let selector = Selector::parse("a").unwrap();
-
     let mut files_to_download = Vec::new();
     let mut directories_to_create = Vec::new();
+    let total_size = Arc::new(AtomicU64::new(0));
 
-    for element in document.select(&selector) {
-        if let Some(href) = element.value().attr("href") {
-            trace!("Found link with href: {}", href);
+    let mut queue = VecDeque::new();
+    queue.push_back((
+        start_url.to_string(),
+        output_dir.to_string(),
+        "".to_string(),
+    ));
 
-            // Skip unwanted URLs based on specific patterns
-            if should_skip_url(href) {
-                continue;
-            }
+    let semaphore = Arc::new(Semaphore::new(10)); // Limit the number of concurrent tasks
 
-            let full_url = Url::parse(url)?.join(href)?;
-            let relative_path = full_url.path();
+    while let Some((url, output_dir, root_relative_path)) = queue.pop_front() {
+        let client = client.clone();
+        let pb = pb.clone();
+        let total_size: Arc<AtomicU64> = total_size.clone();
+        let total_size_clone = total_size.clone();
+        let filters = filters.clone();
+        let semaphore = semaphore.clone();
 
-            // Check if the URL matches any of the filter rules
-            if should_filter(relative_path, filters).unwrap_or(false) {
-                continue;
-            }
+        let task = tokio::task::spawn(async move {
+            let _permit = semaphore.acquire().await.unwrap(); // Acquire a permit before starting
 
-            // Format the total size and set the message
-            let formatted_size = format_size(*total_size);
-            pb.set_message(format!("({:6}) Scanning: {}", formatted_size, full_url));
+            // Send a GET request to the URL
+            let response = client.get(&url).send().await?;
+            let body = response.text().await?;
 
-            pb.inc(1); // Increment the progress bar
+            // Parse HTML body to extract links (synchronous part)
+            let (files_to_download, directories_to_create, subdirectories) =
+                tokio::task::spawn_blocking(move || {
+                    let document = scraper::Html::parse_document(&body);
+                    let selector = Selector::parse("a").unwrap();
 
-            // Check if it's a directory (simple heuristic: ends with '/')
-            if href.ends_with('/') {
-                debug!("Found directory: {}", href);
-                let new_output_dir = format!("{}/{}", output_dir, href.trim_end_matches('/'));
+                    let mut files_to_download = Vec::new();
+                    let mut directories_to_create = Vec::new();
+                    let mut subdirectories = Vec::new();
 
-                let new_root_relative_path = if root_relative_path.is_empty() {
-                    href
-                } else {
-                    &format!("{}/{}", root_relative_path, href)
-                };
+                    for element in document.select(&selector) {
+                        if let Some(href) = element.value().attr("href") {
+                            trace!("Found link with href: {}", href);
 
-                directories_to_create.push(new_output_dir.clone());
+                            // Skip unwanted URLs based on specific patterns
+                            if should_skip_url(href) {
+                                continue;
+                            }
 
-                // Recurse into the directory
-                let (sub_dir_files, _sub_dir_size, sub_directories_to_create) =
-                    Box::pin(crawl_directory(
-                        client,
-                        full_url.as_str(),
-                        &new_output_dir,
-                        pb,
-                        total_size,
-                        filters,
-                        new_root_relative_path,
+                            let full_url = Url::parse(&url)?.join(href)?;
+                            let relative_path = full_url.path();
+
+                            // Check if the URL matches any of the filter rules
+                            if should_filter(relative_path, &filters).unwrap_or(false) {
+                                continue;
+                            }
+
+                            // Format the total size and set the message
+                            let formatted_size = format_size(total_size.load(Ordering::SeqCst));
+                            pb.set_message(format!(
+                                "({:6}) Scanning: {}",
+                                formatted_size, full_url
+                            ));
+
+                            pb.inc(1); // Increment the progress bar
+
+                            // Check if it's a directory (simple heuristic: ends with '/')
+                            if href.ends_with('/') {
+                                debug!("Found directory: {}", href);
+                                let new_output_dir =
+                                    format!("{}/{}", output_dir, href.trim_end_matches('/'));
+
+                                let new_root_relative_path = if root_relative_path.is_empty() {
+                                    href.to_string()
+                                } else {
+                                    format!("{}/{}", root_relative_path, href)
+                                };
+
+                                directories_to_create.push(new_output_dir.clone());
+                                subdirectories.push((
+                                    full_url.to_string(),
+                                    new_output_dir,
+                                    new_root_relative_path,
+                                ));
+                            } else {
+                                // It's a file; add it to the list of files to download
+                                debug!("Found file: {}", href);
+                                files_to_download.push(DownloadData {
+                                    url: full_url.to_string(),
+                                    output_dir: format!("{}/{}", root_relative_path, href),
+                                });
+                            }
+                        }
+                    }
+
+                    Ok::<_, Box<dyn std::error::Error + Send + Sync>>((
+                        files_to_download,
+                        directories_to_create,
+                        subdirectories,
                     ))
-                    .await?;
+                })
+                .await??;
 
-                files_to_download.extend(sub_dir_files); // Collect files from subdirectory
-                directories_to_create.extend(sub_directories_to_create); // Collect directories to create
-            } else {
-                // It's a file; add it to the list of files to download
-                debug!("Found file: {}", href);
-                files_to_download.push(DownloadData {
-                    url: full_url.to_string(),
-                    output_dir: format!("{}/{}", root_relative_path, href),
-                });
-
-                // Get the file size (using HEAD request to avoid downloading it)
-                if let Ok(size) = get_file_size(client, &full_url).await {
-                    *total_size += size;
+            // Process the files to download (async part)
+            for file in &files_to_download {
+                if let Ok(size) = get_file_size(&client, &Url::parse(&file.url)?).await {
+                    total_size_clone.fetch_add(size, Ordering::SeqCst);
                 }
             }
-        }
+
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>((
+                files_to_download,
+                directories_to_create,
+                subdirectories,
+            ))
+        });
+
+        let result = task.await??;
+        files_to_download.extend(result.0);
+        directories_to_create.extend(result.1);
+        queue.extend(result.2);
     }
 
-    Ok((files_to_download, *total_size, directories_to_create))
+    Ok((
+        files_to_download,
+        total_size.load(Ordering::SeqCst),
+        directories_to_create,
+    ))
 }
 
 /// Downloads files in parallel using async tasks.
