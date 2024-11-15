@@ -52,8 +52,8 @@ jobs:
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
-          name: ferrumc-${{ matrix.os }}
-          path: target/${{ matrix.target }}/release/ferrumc*
+          name: atar-rocks-downloader-${{ matrix.os }}
+          path: target/${{ matrix.target }}/release/atar-rocks-downloader*
 
       # Uncomment the following block if you want to send a message to Discord:
       # - name: Send message to Discord
