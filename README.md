@@ -1,3 +1,5 @@
+[![Rust](https://github.com/nulluser0/atar-rocks-downloader/actions/workflows/rust.yml/badge.svg?branch=master)](https://github.com/nulluser0/atar-rocks-downloader/actions/workflows/rust.yml)
+
 # ATAR.Rocks downloader
 
 A web-crawler/script to download the files from [atar.rocks](https://atar.rocks).
