@@ -2,6 +2,16 @@
 
 A web-crawler/script to download the files from [atar.rocks](https://atar.rocks).
 
+## Disclaimer
+
+This software is provided "as-is" and is intended for **educational purposes only**. The developer is not responsible for any **illegal use** of this tool, including but not limited to, downloading or accessing copyrighted content without permission, scraping websites in violation of their terms of service, or any other activities that may violate applicable laws.
+
+By using this tool, you agree to **comply with all applicable laws**, including copyright laws, and the terms and conditions of any websites or services you interact with using this software. The developer does not endorse or encourage the illegal use of this software.
+
+**Use this software at your own risk.** The developer disclaims any liability for any damages, legal consequences, or losses incurred as a result of using this tool for unlawful activities.
+
+If you are unsure about the legal implications of using this tool in your country or jurisdiction, consult with a legal professional before proceeding.
+
 ## Features
 
 - Ability to save and load caches, preventing the need to rescan the website.
