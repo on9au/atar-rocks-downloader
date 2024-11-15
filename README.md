@@ -14,16 +14,15 @@ Please look at the wiki for detailed instructions on how to use the script.
 
 ## I'm a beginner, how can I run this script?
 
-> [!NOTE]
-> The script is not available for download yet. Please wait for the first release, or build the script yourself.
-
-1. Goto [releases](/releases) and download the latest release.
-2. Scroll down to the assets section and download the file corresponding to your operating system and architecture.
-3. For:
+1. Go to the **[Actions](https://github.com/nulluser0/atar-rocks-downloader/actions)** tab of this repository.
+2. Click on the workflow run that you are interested in.
+3. Scroll down to the **Artifacts** section at the bottom of the workflow summary.
+4. Click on the artifact you want to download.
+5. For:
    - `Windows`: Just run the file.
    - `Linux`: Run the file using `./<filename>`.
    - `MacOS`: Open the Terminal app, navigate to where you installed the program, and run the file using `./<filename>`.
-4. Follow the instructions on the screen.
+6. Follow the instructions on the screen.
 
 ## I know what I'm doing, how can I build this script?
 
