@@ -39,12 +39,12 @@ struct Args {
     #[arg(short, long)]
     save_to_file: bool,
 
-    /// Always yes to all prompts
-    #[arg(short)]
+    /// Always answer "yes" to all prompts
+    #[arg(short, long)]
     yes: bool,
 
     /// Only scan the files and then exit
-    #[arg(short, long)]
+    #[arg(long)]
     scan_only: bool,
 }
 
