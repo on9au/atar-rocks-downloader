@@ -78,6 +78,14 @@ pub async fn display_files_and_prompt(
     // If the input is 'n' or 'no', cancel the download
     if user_input == "n" || user_input == "no" {
         info!("Download canceled.");
+        // On Windows, the console window closes immediately after the program exits.
+        // To prevent this, we wait for user input before exiting.
+        #[cfg(windows)]
+        {
+            use std::io::prelude::*;
+            info!("Press Enter to exit...");
+            let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+        }
         process::exit(0);
     }
 

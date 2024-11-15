@@ -20,7 +20,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use network::{crawl_directory, download_files_parallel};
 use percent_encoding::percent_decode_str;
 use tokio::task;
-use tracing::{error, info, trace};
+use tracing::{error, info, trace, warn};
 use utils::{create_http_client, display_files_and_prompt};
 
 /// Command-line arguments
@@ -74,16 +74,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     if args.load_from_file && args.save_to_file {
         error!("Cannot load and save to the same file. Aborting.");
+        // On Windows, the console window closes immediately after the program exits.
+        // To prevent this, we wait for user input before exiting.
+        #[cfg(windows)]
+        {
+            use std::io::prelude::*;
+            info!("Press Enter to exit...");
+            let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+        }
         process::exit(1);
     }
 
     // Load the configuration from the config file.
     let config = Config::from_file(DEFAULT_CONFIG_PATH).unwrap_or_else(|e| {
         error!("Failed to load configuration: {}", e);
-        error!("Using default configuration instead.");
 
         // Create a default configuration if loading fails
-        info!(
+        warn!(
             "Creating default configuration file at {}",
             DEFAULT_CONFIG_PATH
         );
@@ -93,8 +100,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let config_str = toml::to_string_pretty(&config).unwrap();
         std::fs::write(DEFAULT_CONFIG_PATH, config_str).unwrap();
 
-        // Return the default configuration
-        Config::default()
+        info!(
+            "Default configuration file created. Please edit the file and run the program again."
+        );
+
+        info!("The file is located at: {}", DEFAULT_CONFIG_PATH);
+
+        // On Windows, the console window closes immediately after the program exits.
+        // To prevent this, we wait for user input before exiting.
+        #[cfg(windows)]
+        {
+            use std::io::prelude::*;
+            info!("Press Enter to exit...");
+            let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+        }
+
+        // Exit the program
+        process::exit(1);
     });
 
     trace!("Configuration loaded: {:#?}", config);
@@ -107,6 +129,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if args.load_from_file {
         if !Path::new(&args.crawl_data_path).exists() {
             error!("Crawl data file does not exist: {}", args.crawl_data_path);
+            // On Windows, the console window closes immediately after the program exits.
+            // To prevent this, we wait for user input before exiting.
+            #[cfg(windows)]
+            {
+                use std::io::prelude::*;
+                info!("Press Enter to exit...");
+                let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+            }
             process::exit(1);
         }
 
@@ -184,6 +214,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
         if failed {
             tracing::error!("Failed to create directories for the files. Aborting download.");
+            // On Windows, the console window closes immediately after the program exits.
+            // To prevent this, we wait for user input before exiting.
+            #[cfg(windows)]
+            {
+                use std::io::prelude::*;
+                info!("Press Enter to exit...");
+                let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+            }
             process::exit(1);
         }
     }
