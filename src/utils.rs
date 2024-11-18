@@ -6,7 +6,10 @@ use reqwest::{
     Client, Url,
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio_retry2::{strategy::{jitter, ExponentialBackoff, MaxInterval}, Retry, RetryError};
+use tokio_retry2::{
+    strategy::{jitter, ExponentialBackoff, MaxInterval},
+    Retry, RetryError,
+};
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -46,16 +49,46 @@ pub fn create_http_client(user_agent: &str) -> Client {
 }
 
 /// Displays the files and total size, then prompts the user for confirmation.
-pub async fn display_files_and_prompt(
+pub async fn display_prompt(
     files: &[DownloadData],
     total_size: u64,
     skip_prompt: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Display the files to download
-    info!("Files to download:");
-    for file in files {
-        println!("{}", file.url);
+    // // Display the files to download
+    // info!("Files to download:");
+    // for file in files {
+    //     println!("{}", file.url);
+    // }
+
+    // If the skip_prompt flag is set, skip the prompt
+    if skip_prompt {
+        info!("Number of files to download: {}", files.len());
+        info!("Total size: {} bytes", format_size(total_size));
+        info!("Skipping prompt due to --yes/-y flag.");
+        return Ok(());
     }
+
+    // Save the file list to a temporary file which will be deleted after this function
+    let tempfile = tempfile::NamedTempFile::new()?;
+
+    // Write the file list to the temporary file
+    let mut temp_file = tempfile.reopen()?;
+
+    for file in files {
+        writeln!(temp_file, "{}", file.url)?;
+    }
+
+    // Ask user to open the file if they want to see the list
+    info!(
+        "The list of files to download has been saved to: {}",
+        tempfile.path().display()
+    );
+
+    // Inform user that the list will be deleted after this prompt
+    info!("The file will be deleted after this prompt.");
+
+    // Display the files to download
+    info!("Number of files to download: {}", files.len());
 
     // Display the total size
     info!("Total size: {} bytes", format_size(total_size));
@@ -67,12 +100,6 @@ pub async fn display_files_and_prompt(
 
     // info!("Do you want to proceed with downloading the files? (Y/n)");
 
-    // If the skip_prompt flag is set, skip the prompt
-    if skip_prompt {
-        info!("Skipping prompt due to --yes flag.");
-        return Ok(());
-    }
-
     // print and flush the message
     print!("\nDo you want to proceed with downloading the files? (Y/n): ");
     std::io::stdout().flush().unwrap();
@@ -82,6 +109,11 @@ pub async fn display_files_and_prompt(
 
     // Trim the input to remove extra spaces or newlines
     let user_input = user_input.trim().to_lowercase();
+
+    // Close the temporary file
+    let _ = tempfile.close().map_err(|_| {
+        warn!("Failed to close the temporary file.");
+    });
 
     // If the input is 'n' or 'no', cancel the download
     if user_input == "n" || user_input == "no" {
@@ -112,11 +144,22 @@ pub fn should_skip_url(href: &str) -> bool {
         || href.starts_with('?')
 }
 
-async fn action(client: &Client, url: &Url) -> Result<u64, RetryError<Box<dyn std::error::Error + Send + Sync>>> {
-    let response = client.head(url.clone()).send().await.map_err(|e| RetryError::transient(Box::new(e) as Box<dyn std::error::Error + Send + Sync>))?;
+async fn action(
+    client: &Client,
+    url: &Url,
+) -> Result<u64, RetryError<Box<dyn std::error::Error + Send + Sync>>> {
+    let response = client.head(url.clone()).send().await.map_err(|e| {
+        RetryError::transient(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+    })?;
     if response.status().is_success() {
         if let Some(content_length) = response.headers().get(reqwest::header::CONTENT_LENGTH) {
-            if let Ok(size) = content_length.to_str().map_err(|e| RetryError::transient(Box::new(e) as Box<dyn std::error::Error + Send + Sync>))?.parse::<u64>() {
+            if let Ok(size) = content_length
+                .to_str()
+                .map_err(|e| {
+                    RetryError::transient(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                })?
+                .parse::<u64>()
+            {
                 return Ok(size);
             }
         }
@@ -131,15 +174,18 @@ fn notify(err: &Box<dyn std::error::Error + Send + Sync>, duration: std::time::D
 }
 
 /// Returns the file size from the Content-Length header (if available).
-pub async fn get_file_size(client: &Client, url: &Url) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn get_file_size(
+    client: &Client,
+    url: &Url,
+) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
     let retry_strategy = ExponentialBackoff::from_millis(10)
-            .factor(1)
-            .max_delay_millis(100)
-            .max_interval(10000)
-            .map(jitter)
-            .take(150);
+        .factor(1)
+        .max_delay_millis(100)
+        .max_interval(10000)
+        .map(jitter)
+        .take(150);
 
-        Retry::spawn_notify(retry_strategy, || action(client, url), notify).await
+    Retry::spawn_notify(retry_strategy, || action(client, url), notify).await
 }
 
 /// Formats a byte size into a human-readable format (e.g., "10.5 MB").

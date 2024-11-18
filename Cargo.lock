@@ -125,7 +125,7 @@ dependencies = [
 
 [[package]]
 name = "atar-rocks-downloader"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "bincode",
  "chrono",
@@ -139,6 +139,7 @@ dependencies = [
  "reqwest",
  "scraper",
  "serde",
+ "tempfile",
  "tokio",
  "tokio-retry2",
  "toml",

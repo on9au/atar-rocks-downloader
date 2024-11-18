@@ -19,9 +19,9 @@ use crawl_data::CrawlData;
 use indicatif::{ProgressBar, ProgressStyle};
 use network::{crawl_directory, download_files_parallel};
 use percent_encoding::percent_decode_str;
-use tokio::task;
+use tokio::{io::AsyncWriteExt, task};
 use tracing::{error, info, trace, warn};
-use utils::{create_http_client, display_files_and_prompt};
+use utils::{create_http_client, display_prompt};
 
 /// Command-line arguments
 #[derive(Parser, Debug)]
@@ -46,6 +46,10 @@ struct Args {
     /// Only scan the files and then exit
     #[arg(long)]
     scan_only: bool,
+
+    /// Read the crawl data and output the list of files to download as a text file
+    #[arg(short, long)]
+    read: bool,
 }
 
 #[tokio::main]
@@ -68,6 +72,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
+    if args.read {
+        // Read the crawl data from the file and output the list of files to download
+        if !Path::new(&args.crawl_data_path).exists() {
+            error!("Crawl data file does not exist: {}", args.crawl_data_path);
+            // On Windows, the console window closes immediately after the program exits.
+            // To prevent this, we wait for user input before exiting.
+            #[cfg(windows)]
+            {
+                use std::io::prelude::*;
+                info!("Press Enter to exit...");
+                let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+            }
+            process::exit(1);
+        }
+
+        // Read the crawl data from the file
+        let data_str = tokio::fs::read(&args.crawl_data_path).await?;
+
+        let crawl_data: CrawlData = bincode::deserialize(&data_str)?;
+
+        // Create a text file with the list of files to download
+        let output_path = format!("{}_download_list.txt", args.crawl_data_path);
+
+        let mut output = tokio::fs::File::create(&output_path).await?;
+
+        output.write_all(crawl_data.to_string().as_bytes()).await?;
+
+        info!("Download list written to {}", output_path);
+
+        // On Windows, the console window closes immediately after the program exits.
+        // To prevent this, we wait for user input before exiting.
+        #[cfg(windows)]
+        {
+            use std::io::prelude::*;
+            info!("Press Enter to exit...");
+            let _ = std::io::stdin().read(&mut [0u8]).unwrap();
+        }
+
+        process::exit(0);
+    }
 
     // Display confirmation of the arguments passed
     if args.load_from_file {
@@ -206,7 +251,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 
     // Display file names and prompt the user for confirmation
-    display_files_and_prompt(&crawl_data.download_list, crawl_data.total_size, args.yes).await?;
+    display_prompt(&crawl_data.download_list, crawl_data.total_size, args.yes).await?;
 
     // Create directories for the files to download
     // Since we expect a large number of directories, we create them in parallel
