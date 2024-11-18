@@ -75,7 +75,7 @@ pub fn crawl_directory(
             .max_delay_millis(100)
             .max_interval(10000)
             .map(jitter)
-            .take(15);
+            .take(150);
 
         // Send a GET request to the URL
         // let response = client.get(&url).send().await?;

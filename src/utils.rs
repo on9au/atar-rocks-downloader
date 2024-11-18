@@ -6,6 +6,7 @@ use reqwest::{
     Client, Url,
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio_retry2::{strategy::{jitter, ExponentialBackoff, MaxInterval}, Retry, RetryError};
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -111,18 +112,34 @@ pub fn should_skip_url(href: &str) -> bool {
         || href.starts_with('?')
 }
 
-/// Returns the file size from the Content-Length header (if available).
-pub async fn get_file_size(client: &Client, url: &Url) -> Result<u64, Box<dyn std::error::Error>> {
-    let response = client.head(url.clone()).send().await?;
+async fn action(client: &Client, url: &Url) -> Result<u64, RetryError<Box<dyn std::error::Error + Send + Sync>>> {
+    let response = client.head(url.clone()).send().await.map_err(|e| RetryError::transient(Box::new(e) as Box<dyn std::error::Error + Send + Sync>))?;
     if response.status().is_success() {
         if let Some(content_length) = response.headers().get(reqwest::header::CONTENT_LENGTH) {
-            if let Ok(size) = content_length.to_str()?.parse::<u64>() {
+            if let Ok(size) = content_length.to_str().map_err(|e| RetryError::transient(Box::new(e) as Box<dyn std::error::Error + Send + Sync>))?.parse::<u64>() {
                 return Ok(size);
             }
         }
     }
     warn!("Failed to get file size for: {}", url);
     Ok(0) // Return 0 if the size is not available
+}
+
+#[allow(clippy::borrowed_box)] // it forces a &Box lmao
+fn notify(err: &Box<dyn std::error::Error + Send + Sync>, duration: std::time::Duration) {
+    warn!("Failed to get file size. Retrying... Error {err} occurred at {duration:?}");
+}
+
+/// Returns the file size from the Content-Length header (if available).
+pub async fn get_file_size(client: &Client, url: &Url) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
+    let retry_strategy = ExponentialBackoff::from_millis(10)
+            .factor(1)
+            .max_delay_millis(100)
+            .max_interval(10000)
+            .map(jitter)
+            .take(150);
+
+        Retry::spawn_notify(retry_strategy, || action(client, url), notify).await
 }
 
 /// Formats a byte size into a human-readable format (e.g., "10.5 MB").
