@@ -2,6 +2,9 @@
 
 A web-crawler/script to download the files from [atar.rocks](https://atar.rocks).
 
+> [!WARNING]  
+> atar.rocks will be shutting down in the year 2025. The files has also been made inaccessible. The website will be uploading compressed archives to download the entire website (however it lacks certain files like commercial exams). As a result, this program lacks any use.
+
 ## Disclaimer
 
 This software is provided "as-is" and is intended for **educational purposes only**. The developer is not responsible for any **illegal use** of this tool, including but not limited to, downloading or accessing copyrighted content without permission, scraping websites in violation of their terms of service, or any other activities that may violate applicable laws.
