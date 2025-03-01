@@ -1,6 +1,12 @@
 # ATAR.Rocks downloader
 
-A web-crawler/script to download the files from [atar.rocks](https://atar.rocks).
+A web-crawler/script to download the files from (the now defunct) [atar.rocks](https://atar.rocks).
+
+This used to work but since atar.rocks doesn't work anymore there isnt much point of this
+
+I guess, **this still works on any NGINX static file hosting with file index website**, just change the URL in the config.toml that the program produces.
+
+old shit below:
 
 > [!WARNING]  
 > atar.rocks will be shutting down in the year 2025. The files has also been made inaccessible. The website will be uploading compressed archives to download the entire website (however it lacks certain files like commercial exams). As a result, this program lacks any use.
